@@ -80,7 +80,7 @@ export default function HomePage() {
     if (!user) return;
     supabase
       .from('profiles')
-      .select('is_admin, avatar_url, nick_name')
+      .select('is_admin, nick_name')
       .eq('id_uuid', user.id)
       .single()
       .then(({ data }) => setUserProfile(data));
@@ -208,7 +208,7 @@ export default function HomePage() {
                     fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1"
                   />
                   <line
-                    x1={VB_W / 2} y1="12" x2={VB_W / 2} y2={VB_H - 12}
+                    x1="12" y1={VB_H / 2} x2={VB_W - 12} y2={VB_H / 2}
                     stroke="rgba(255,255,255,0.25)" strokeWidth="1"
                   />
                   <circle

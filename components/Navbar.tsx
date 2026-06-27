@@ -7,7 +7,6 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, User, Trophy, Sparkles, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase-browser';
-import { useAvatar } from '@/hooks/use-avatar';
 import { AvatarSkeleton } from '@/components/SkeletonLoader';
 
 export default function Navbar() {
@@ -15,7 +14,6 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { getAvatarUrl } = useAvatar(user?.id);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -33,14 +31,12 @@ export default function Navbar() {
     queryKey: ['profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data } = await supabase.from('profiles').select('nick_name, avatar_url, is_admin').eq('id_uuid', user.id).single();
+      const { data } = await supabase.from('profiles').select('nick_name, is_admin').eq('id_uuid', user.id).single();
       return data;
     },
     enabled: !!user?.id,
     staleTime: 60 * 1000,
   });
-
-  const avatarUrl = getAvatarUrl(profile?.avatar_url ?? null, 32);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -97,17 +93,9 @@ export default function Navbar() {
           {user && (
             <div className="hidden md:flex items-center gap-2">
               {profile ? (
-                avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt={profile.nick_name}
-                    className="w-7 h-7 rounded-full object-cover border border-white/20"
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
-                    {profile.nick_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
-                  </div>
-                )
+                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
+                  {profile.nick_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
+                </div>
               ) : (
                 <AvatarSkeleton size={28} />
               )}

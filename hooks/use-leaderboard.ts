@@ -22,10 +22,11 @@ export function useLeaderboard() {
   return useQuery({
     queryKey: ['leaderboard'],
     queryFn: async () => {
+      // EXACTLY matches original working queries
       const [playersRes, matchesRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('nick_name, media_score, win_percentage, goal')
+          .select('nick_name, media_score')
           .not('media_score', 'is', null)
           .order('media_score', { ascending: false })
           .limit(10),
@@ -40,7 +41,7 @@ export function useLeaderboard() {
       const players: LeaderboardPlayer[] = (playersRes.data || []).map((p: any) => ({
         nick_name: p.nick_name,
         media_score: p.media_score,
-        win_percentage: p.win_percentage ?? null,
+        win_percentage: null,
         goal: p.goal || 0,
       }));
 

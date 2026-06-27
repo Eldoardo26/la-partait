@@ -17,15 +17,8 @@ export interface FieldPlayer {
   winPercentage: number | null;
 }
 
-export interface OpenMatch {
-  id_uuid: string;
-  match_date: string;
-  match_type: string;
-  status: string;
-}
-
 export interface MatchData {
-  match: OpenMatch | null;
+  match: { id_uuid: string; match_date: string; match_type: string; status: string } | null;
   players: FieldPlayer[];
   userVotes: Record<string, number>;
   mvpId: string | null;
@@ -48,6 +41,7 @@ export function useMatch(userId: string | undefined) {
     queryFn: async (): Promise<MatchData> => {
       const result: MatchData = { match: null, players: [], userVotes: {}, mvpId: null };
 
+      // EXACTLY matches original working query: select('*').eq('status','APERTO').maybeSingle()
       const { data: openMatch } = await supabase
         .from('matches')
         .select('*')
@@ -57,25 +51,25 @@ export function useMatch(userId: string | undefined) {
       if (!openMatch) return result;
       result.match = openMatch;
 
+      // EXACTLY matches original: select('*, profiles(nick_name)')
       const { data: mp } = await supabase
         .from('match_players')
-        .select('*, profiles!inner(nick_name, avatar_url, win_percentage, goal)')
+        .select('*, profiles(nick_name)')
         .eq('match_id', openMatch.id_uuid);
 
       const rawPlayers = mp || [];
 
-      // Group by team
+      // Group by team column (exists in your schema)
       const teamA = rawPlayers.filter((p: any) => p.team === 'A');
       const teamB = rawPlayers.filter((p: any) => p.team === 'B');
-      const unassigned = rawPlayers.filter((p: any) => p.team !== 'A' && p.team !== 'B');
 
-      // If no team column yet (backward compat), fall back to index split
+      // Fallback: if no team assigned, split by index like original code
       const useTeamA = teamA.length > 0 || teamB.length > 0
         ? teamA
-        : unassigned.slice(0, Math.ceil(unassigned.length / 2));
+        : rawPlayers.slice(0, Math.ceil(rawPlayers.length / 2));
       const useTeamB = teamB.length > 0 || teamA.length > 0
         ? teamB
-        : unassigned.slice(Math.ceil(unassigned.length / 2));
+        : rawPlayers.slice(Math.ceil(rawPlayers.length / 2));
 
       const posA = getPositions(useTeamA.length, true);
       const posB = getPositions(useTeamB.length, false);
@@ -83,15 +77,15 @@ export function useMatch(userId: string | undefined) {
       const buildPlayer = (p: any, team: 'A' | 'B', i: number, positions: [number, number][]): FieldPlayer => ({
         id: p.player_id,
         name: p.profiles?.nick_name || 'Giocatore',
-        avatarUrl: p.profiles?.avatar_url || null,
+        avatarUrl: null,
         team,
         pos: (positions[i] ?? [170, team === 'A' ? 460 : 60]) as [number, number],
         score: null,
         matchVote: p.voto ?? null,
         goals: p.GOAL || 0,
-        totalGoals: p.profiles?.goal || 0,
+        totalGoals: 0,
         mvp: p.mvp || false,
-        winPercentage: p.profiles?.win_percentage ?? null,
+        winPercentage: null,
       });
 
       const built: FieldPlayer[] = [
@@ -100,6 +94,7 @@ export function useMatch(userId: string | undefined) {
       ];
 
       if (userId) {
+        // EXACTLY matches original vote query
         const { data: myVotes } = await supabase
           .from('votes')
           .select('target_id, score')
@@ -115,7 +110,6 @@ export function useMatch(userId: string | undefined) {
           result.userVotes = vObj;
         }
 
-        // MVP from match_players where mvp = true
         const mvpPlayer = built.find((p) => p.mvp);
         result.mvpId = mvpPlayer?.id ?? null;
       }
@@ -146,11 +140,10 @@ export function useSubmitVotes() {
         voter_id: voterId,
         target_id: playerId,
         match_id: matchId,
-        score: Math.round(score),
+        score,
       }));
 
       await supabase.from('votes').upsert(voteRows);
-
       await supabase.from('match_players').update({ mvp: false }).eq('match_id', matchId);
       if (mvpId) {
         await supabase
