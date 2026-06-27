@@ -15,34 +15,53 @@ const citazioni = [
   "C'è un clima da guerra."
 ];
 
-// Posizioni sul campo SVG (viewBox 340x520) per squadre da 5, 6 o 7
+// Posizioni sul campo SVG (viewBox 340x520).
+// La metà campo usata va da y=20 (porta) a y=245 (centrocampo).
+// isTeamA=true → squadra in basso (y flippata), isTeamA=false → squadra in alto.
 function getPositions(count: number, isTeamA: boolean): [number, number][] {
+  // Coordinate nel "mezzo campo alto" (y=20..245). yFlip le porta in basso per team A.
   const yFlip = (y: number) => isTeamA ? 520 - y : y;
 
+  // Ogni layout usa righe ben spaziate: portiere ~35, difesa ~105, centrocampo ~180, attacco ~245
   const layouts: Record<number, [number, number][]> = {
+    2: [
+      [170, 35],
+      [170, 150],
+    ],
+    3: [
+      [170, 35],
+      [100, 140],
+      [240, 140],
+    ],
+    4: [
+      [170, 35],          // portiere
+      [100, 115],         // difensore sx
+      [240, 115],         // difensore dx
+      [170, 195],         // centrocampista
+    ],
     5: [
-      [170, 40],   // portiere
-      [90, 150],   // difensore sx
-      [250, 150],  // difensore dx
-      [110, 240],  // centrocampista sx
-      [230, 240],  // centrocampista dx
+      [170, 35],          // portiere
+      [90,  115],         // difensore sx
+      [250, 115],         // difensore dx
+      [110, 200],         // centrocampista sx
+      [230, 200],         // centrocampista dx
     ],
     6: [
-      [170, 40],
-      [90, 140],
-      [250, 140],
-      [100, 220],
-      [240, 220],
-      [170, 210],
+      [170, 35],          // portiere
+      [90,  105],         // difensore sx
+      [250, 105],         // difensore dx
+      [100, 180],         // centrocampista sx
+      [240, 180],         // centrocampista dx
+      [170, 235],         // attaccante
     ],
     7: [
-      [170, 40],
-      [80, 130],
-      [260, 130],
-      [80, 220],
-      [260, 220],
-      [140, 200],
-      [200, 200],
+      [170, 35],          // portiere
+      [80,  100],         // difensore sx
+      [260, 100],         // difensore dx
+      [100, 165],         // centrocampista sx
+      [240, 165],         // centrocampista dx
+      [140, 230],         // attaccante sx
+      [200, 230],         // attaccante dx
     ],
   };
 
