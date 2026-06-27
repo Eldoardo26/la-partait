@@ -26,7 +26,7 @@ export function useLeaderboard() {
       const [playersRes, matchesRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('nick_name, media_score')
+          .select('nick_name, media_score,goal')
           .not('media_score', 'is', null)
           .order('media_score', { ascending: false })
           .limit(10),
