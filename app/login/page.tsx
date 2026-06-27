@@ -15,46 +15,72 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  async function handleLogin() {
+  const switchMode = () => {
+    setIsRegistering(!isRegistering);
+    setError('');
+    setSuccess('');
+  };
+
+  async function handleAuth() {
     setLoading(true);
     setError('');
+    setSuccess('');
 
-    // 1. Esegui il login
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
-      email, 
-      password 
-    });
+    if (isRegistering) {
+      // REGISTRAZIONE
+      const { error: signUpError } = await supabase.auth.signUp({ email, password });
 
-    if (authError || !authData.user) {
-      setError('Credenziali non valide. Riprova.');
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccess('Account creato! Controlla la tua email per confermare, poi accedi.');
+      setIsRegistering(false);
       setLoading(false);
-      return;
-    }
-
-    // 2. Controllo stato completamento profilo
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('has_completed_profile')
-      .eq('id_uuid', authData.user.id)
-      .single();
-
-    // 3. Reindirizzamento condizionale
-    if (profileError || !profile?.has_completed_profile) {
-      // Se non esiste profilo o non è completo, vai al setup
-      router.push('/setup');
     } else {
-      // Se è tutto ok, vai alla home
-      router.push('/');
+      // LOGIN
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError || !authData.user) {
+        setError('Email o password non validi.');
+        setLoading(false);
+        return;
+      }
+
+      // Check profilo
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('has_completed_profile')
+        .eq('id_uuid', authData.user.id)
+        .single();
+
+      if (profileError || !profile?.has_completed_profile) {
+        router.push('/setup');
+      } else {
+        router.push('/');
+      }
+      router.refresh();
     }
-    
-    router.refresh();
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full mx-4 p-8 bg-white shadow-lg rounded-2xl border border-gray-100">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800 text-center">Accedi</h1>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <span className="text-4xl">⚽</span>
+          <h1 className="text-2xl font-bold mt-2 text-gray-800">
+            {isRegistering ? 'Crea un account' : 'Bentornato'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {isRegistering ? 'Unisciti a La partait' : 'Accedi a La partait'}
+          </p>
+        </div>
 
         <div className="space-y-4">
           <div>
@@ -63,10 +89,8 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               placeholder="la-tua@email.com"
-              autoComplete="email"
+              className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
             />
           </div>
 
@@ -76,24 +100,48 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               placeholder="••••••••"
-              autoComplete="current-password"
+              className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
             />
           </div>
 
+          {/* Messaggi di errore / successo */}
           {error && (
-            <p className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{error}</p>
+            <p className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100">
+              {success}
+            </p>
           )}
 
+          {/* Bottone principale */}
           <button
-            onClick={handleLogin}
+            onClick={handleAuth}
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 transition"
           >
-            {loading ? 'Verifica in corso...' : 'Accedi'}
+            {loading
+              ? 'Attendere...'
+              : isRegistering
+              ? 'Crea account'
+              : 'Accedi'}
           </button>
+
+          {/* Switch login / registrazione */}
+          <div className="text-center pt-1">
+            <span className="text-sm text-gray-500">
+              {isRegistering ? 'Hai già un account? ' : 'Non hai un account? '}
+            </span>
+            <button
+              onClick={switchMode}
+              className="text-sm text-blue-600 hover:underline font-medium"
+            >
+              {isRegistering ? 'Accedi' : 'Registrati'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
