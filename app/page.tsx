@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Vote, Crown } from 'lucide-react';
+import { Vote } from 'lucide-react';
 
 const citazioni = [
   "Non dire gatto se non ce l'hai nel sacco.",
@@ -15,56 +15,28 @@ const citazioni = [
   "C'è un clima da guerra."
 ];
 
-// Posizioni sul campo SVG (viewBox 340x520).
-// La metà campo usata va da y=20 (porta) a y=245 (centrocampo).
-// isTeamA=true → squadra in basso (y flippata), isTeamA=false → squadra in alto.
+// Posizioni di default nel mezzo campo alto (y 20..245), poi flippate per team A
 function getPositions(count: number, isTeamA: boolean): [number, number][] {
-  // Coordinate nel "mezzo campo alto" (y=20..245). yFlip le porta in basso per team A.
   const yFlip = (y: number) => isTeamA ? 520 - y : y;
-
-  // Ogni layout usa righe ben spaziate: portiere ~35, difesa ~105, centrocampo ~180, attacco ~245
   const layouts: Record<number, [number, number][]> = {
-    2: [
-      [170, 35],
-      [170, 150],
-    ],
-    3: [
-      [170, 35],
-      [100, 140],
-      [240, 140],
-    ],
-    4: [
-      [170, 35],          // portiere
-      [100, 115],         // difensore sx
-      [240, 115],         // difensore dx
-      [170, 195],         // centrocampista
-    ],
     5: [
-      [170, 35],          // portiere
-      [90,  115],         // difensore sx
-      [250, 115],         // difensore dx
-      [110, 200],         // centrocampista sx
-      [230, 200],         // centrocampista dx
+      [170, 35],
+      [90,  115], [250, 115],
+      [110, 200], [230, 200],
     ],
     6: [
-      [170, 35],          // portiere
-      [90,  105],         // difensore sx
-      [250, 105],         // difensore dx
-      [100, 180],         // centrocampista sx
-      [240, 180],         // centrocampista dx
-      [170, 235],         // attaccante
+      [170, 35],
+      [90,  105], [250, 105],
+      [100, 180], [240, 180],
+      [170, 235],
     ],
     7: [
-      [170, 35],          // portiere
-      [80,  100],         // difensore sx
-      [260, 100],         // difensore dx
-      [100, 165],         // centrocampista sx
-      [240, 165],         // centrocampista dx
-      [140, 230],         // attaccante sx
-      [200, 230],         // attaccante dx
+      [170, 35],
+      [80,  100], [260, 100],
+      [100, 165], [240, 165],
+      [140, 230], [200, 230],
     ],
   };
-
   const base = layouts[count] ?? layouts[5];
   return base.map(([x, y]) => [x, yFlip(y)]);
 }
@@ -91,6 +63,11 @@ interface VoteModal {
   isMvp: boolean;
 }
 
+// SVG viewBox dimensions
+const VB_W = 340;
+const VB_H = 520;
+const RADIUS = 18;
+
 export default function HomePage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -110,6 +87,12 @@ export default function HomePage() {
   const [submitting, setSubmitting] = useState(false);
   const [closing, setClosing] = useState(false);
   const [modal, setModal] = useState<VoteModal | null>(null);
+  const [teamError, setTeamError] = useState<string | null>(null);
+
+  // Drag state (admin only)
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragging = useRef<{ id: string; startX: number; startY: number } | null>(null);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     setCitazione(citazioni[Math.floor(Math.random() * citazioni.length)]);
@@ -137,13 +120,15 @@ export default function HomePage() {
         .select('*, profiles(nick_name)')
         .eq('match_id', openMatchRes.data.id_uuid);
 
-      const rawPlayers = mp || [];
+      const rawPlayers = (mp || []).filter((p: any) => p.player_id !== user?.id);
+      const half = Math.ceil(rawPlayers.length / 2);
+      const teamA = rawPlayers.slice(0, half);
+      const teamB = rawPlayers.slice(half);
 
-      // Dividi in due squadre di pari numero (metà A, metà B)
-      const others = rawPlayers.filter((p: any) => p.player_id !== user?.id);
-      const half = Math.ceil(others.length / 2);
-      const teamA = others.slice(0, half);
-      const teamB = others.slice(half);
+      // Validate symmetric teams
+      if (teamA.length !== teamB.length) {
+        setTeamError(`Squadre asimmetriche: Squadra A ha ${teamA.length} giocatori, Squadra B ha ${teamB.length}. Devono essere uguali (5v5, 6v6 o 7v7).`);
+      }
 
       const posA = getPositions(teamA.length, true);
       const posB = getPositions(teamB.length, false);
@@ -153,7 +138,7 @@ export default function HomePage() {
           id: p.player_id,
           name: p.profiles?.nick_name || 'Giocatore',
           team: 'A' as const,
-          pos: posA[i] ?? [170, 460],
+          pos: (posA[i] ?? [170, 460]) as [number, number],
           score: null,
           mvp: false,
         })),
@@ -161,7 +146,7 @@ export default function HomePage() {
           id: p.player_id,
           name: p.profiles?.nick_name || 'Giocatore',
           team: 'B' as const,
-          pos: posB[i] ?? [170, 60],
+          pos: (posB[i] ?? [170, 60]) as [number, number],
           score: null,
           mvp: false,
         })),
@@ -181,10 +166,7 @@ export default function HomePage() {
           const vObj: Record<string, number> = {};
           myVotes.forEach((v: any) => (vObj[v.target_id] = v.score));
           setVotes(vObj);
-          // Applica voti già salvati ai giocatori sul campo
-          built.forEach(p => {
-            if (vObj[p.id] !== undefined) p.score = vObj[p.id];
-          });
+          built.forEach(p => { if (vObj[p.id] !== undefined) p.score = vObj[p.id]; });
         }
       }
 
@@ -192,6 +174,69 @@ export default function HomePage() {
     }
     setLoading(false);
   }
+
+  // --- Drag & Drop (admin only, touch + mouse) ---
+
+  function svgPoint(clientX: number, clientY: number): [number, number] {
+    const svg = svgRef.current;
+    if (!svg) return [0, 0];
+    const rect = svg.getBoundingClientRect();
+    const scaleX = VB_W / rect.width;
+    const scaleY = VB_H / rect.height;
+    return [
+      (clientX - rect.left) * scaleX,
+      (clientY - rect.top) * scaleY,
+    ];
+  }
+
+  function clamp(val: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, val));
+  }
+
+  function onPointerDown(e: React.PointerEvent, id: string) {
+    if (!isAdmin) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const [sx, sy] = svgPoint(e.clientX, e.clientY);
+    dragging.current = { id, startX: sx, startY: sy };
+    isDragging.current = false;
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (!isAdmin || !dragging.current) return;
+    const [mx, my] = svgPoint(e.clientX, e.clientY);
+    const dx = mx - dragging.current.startX;
+    const dy = my - dragging.current.startY;
+    if (!isDragging.current && Math.sqrt(dx * dx + dy * dy) > 4) {
+      isDragging.current = true;
+    }
+    if (!isDragging.current) return;
+
+    const { id } = dragging.current;
+    setFieldPlayers(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      return {
+        ...p,
+        pos: [
+          clamp(mx, RADIUS + 5, VB_W - RADIUS - 5),
+          clamp(my, RADIUS + 5, VB_H - RADIUS - 5),
+        ],
+      };
+    }));
+  }
+
+  function onPointerUp(e: React.PointerEvent, id: string) {
+    if (!isAdmin) return;
+    const wasActuallyDragging = isDragging.current;
+    dragging.current = null;
+    isDragging.current = false;
+    if (!wasActuallyDragging) {
+      // It was a tap/click — open modal
+      const p = fieldPlayers.find(fp => fp.id === id);
+      if (p) openModal(p);
+    }
+  }
+
+  // --- Vote modal ---
 
   function openModal(p: FieldPlayer) {
     setModal({
@@ -206,7 +251,6 @@ export default function HomePage() {
     const raw = parseFloat(modal.inputVal.replace(',', '.'));
     if (isNaN(raw) || raw < 1 || raw > 10) return;
     const rounded = Math.round(raw * 2) / 2;
-
     const newMvpId = modal.isMvp ? modal.player.id : (mvpId === modal.player.id ? null : mvpId);
     setMvpId(newMvpId);
     setVotes(prev => ({ ...prev, [modal.player.id]: rounded }));
@@ -220,23 +264,22 @@ export default function HomePage() {
     setModal(null);
   }
 
+  // --- Submit / close ---
+
   async function submitVotes() {
     if (!user || !openMatch) return;
     setSubmitting(true);
-
     const voteRows = Object.entries(votes).map(([playerId, score]) => ({
       voter_id: user.id,
       target_id: playerId,
       match_id: openMatch.id_uuid,
       score,
     }));
-
     await supabase.from('votes').upsert(voteRows);
     await supabase.from('match_players').update({ mvp: false }).eq('match_id', openMatch.id_uuid);
     if (mvpId) {
       await supabase.from('match_players').update({ mvp: true }).eq('match_id', openMatch.id_uuid).eq('player_id', mvpId);
     }
-
     alert('✅ Voti e MVP salvati!');
     setSubmitting(false);
   }
@@ -244,18 +287,15 @@ export default function HomePage() {
   async function closeVoting() {
     setClosing(true);
     const { data: allVotes } = await supabase.from('votes').select('target_id, score').eq('match_id', openMatch.id_uuid);
-
     const grouped: Record<string, number[]> = {};
     allVotes?.forEach((v: any) => {
       if (!grouped[v.target_id]) grouped[v.target_id] = [];
       grouped[v.target_id].push(v.score);
     });
-
     for (const [pId, scores] of Object.entries(grouped)) {
       const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
       await supabase.from('match_players').update({ voto: avg.toFixed(2) }).eq('match_id', openMatch.id_uuid).eq('player_id', pId);
     }
-
     const { data: mvpData } = await supabase
       .from('match_players')
       .select('profiles(nick_name)')
@@ -263,34 +303,35 @@ export default function HomePage() {
       .eq('mvp', true)
       .single();
     const mvpName = mvpData?.profiles ? (mvpData.profiles as any).nick_name : null;
-
     await supabase.from('matches').update({ status: 'FINITO', MVP: mvpName }).eq('id_uuid', openMatch.id_uuid);
     window.location.reload();
   }
 
-  // --- SVG Campo ---
+  // --- SVG Field ---
+
   function FieldSVG() {
     return (
-      <svg viewBox="0 0 340 520" xmlns="http://www.w3.org/2000/svg" className="w-full">
-        {/* Manto erboso */}
-        <rect width="340" height="520" rx="6" fill="#3B6D11" />
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full touch-none select-none"
+        onPointerMove={onPointerMove}
+      >
+        {/* Pitch */}
+        <rect width={VB_W} height={VB_H} rx="6" fill="#3B6D11" />
         <rect x="10" y="10" width="320" height="500" rx="4" fill="none" stroke="#5DA832" strokeWidth="1.5" />
-        {/* Linea di metà campo */}
         <line x1="10" y1="260" x2="330" y2="260" stroke="#5DA832" strokeWidth="1.5" />
-        {/* Cerchio centrale */}
         <circle cx="170" cy="260" r="40" fill="none" stroke="#5DA832" strokeWidth="1.5" />
         <circle cx="170" cy="260" r="3" fill="#5DA832" />
-        {/* Area superiore */}
         <rect x="110" y="10" width="120" height="55" fill="none" stroke="#5DA832" strokeWidth="1.5" />
         <rect x="140" y="10" width="60" height="25" fill="none" stroke="#5DA832" strokeWidth="1.5" />
-        {/* Area inferiore */}
         <rect x="110" y="455" width="120" height="55" fill="none" stroke="#5DA832" strokeWidth="1.5" />
         <rect x="140" y="485" width="60" height="25" fill="none" stroke="#5DA832" strokeWidth="1.5" />
-        {/* Rigori */}
         <circle cx="170" cy="75" r="3" fill="#5DA832" />
         <circle cx="170" cy="445" r="3" fill="#5DA832" />
 
-        {/* Giocatori */}
+        {/* Players */}
         {fieldPlayers.map(p => {
           const [cx, cy] = p.pos;
           const teamColor = p.team === 'A' ? '#378ADD' : '#E24B4A';
@@ -299,24 +340,28 @@ export default function HomePage() {
           const hasScore = sc !== undefined && sc !== null;
 
           return (
-            <g key={p.id} onClick={() => openModal(p)} style={{ cursor: 'pointer' }}>
-              {/* Anello voto */}
+            <g
+              key={p.id}
+              style={{ cursor: isAdmin ? 'grab' : 'pointer' }}
+              onPointerDown={e => onPointerDown(e, p.id)}
+              onPointerUp={e => onPointerUp(e, p.id)}
+              onClick={!isAdmin ? () => openModal(p) : undefined}
+            >
               {hasScore && (
                 <circle cx={cx} cy={cy} r={22} fill="none" stroke={scoreColor(sc)} strokeWidth={3} />
               )}
-              {/* Cerchio giocatore */}
-              <circle cx={cx} cy={cy} r={18} fill={teamColor} stroke="#fff" strokeWidth={p.id === mvpId ? 3 : 1.5} />
-              {/* Iniziali */}
+              <circle cx={cx} cy={cy} r={RADIUS} fill={teamColor} stroke="#fff" strokeWidth={p.id === mvpId ? 3 : 1.5} />
               <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={10} fontWeight={500}>{initials}</text>
-              {/* Nome */}
               <text x={cx} y={cy + 28} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={9}>{p.name.split(' ')[0]}</text>
-              {/* Voto */}
               {hasScore && (
                 <text x={cx + 14} y={cy - 14} textAnchor="middle" dominantBaseline="middle" fill={scoreColor(sc)} fontSize={10} fontWeight={500}>{Number(sc).toFixed(1)}</text>
               )}
-              {/* Corona MVP */}
               {p.id === mvpId && (
                 <text x={cx - 14} y={cy - 14} textAnchor="middle" dominantBaseline="middle" fontSize={13}>♛</text>
+              )}
+              {/* Admin drag handle hint */}
+              {isAdmin && (
+                <circle cx={cx} cy={cy} r={RADIUS} fill="transparent" />
               )}
             </g>
           );
@@ -338,8 +383,16 @@ export default function HomePage() {
           <h2 className="font-bold mb-1 flex items-center gap-2">
             <Vote className="text-green-500" /> Vota Giocatori
           </h2>
+
+          {/* Errore squadre asimmetriche */}
+          {teamError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-2 mb-3">
+              ⚠️ {teamError}
+            </div>
+          )}
+
           <p className="text-xs text-gray-500 mb-3 italic">
-            Tocca un giocatore sul campo per votarlo. La corona ♛ indica l'MVP.
+            Tocca un giocatore per votarlo.{isAdmin && ' Trascina per riposizionarlo.'} La corona ♛ indica l'MVP.
           </p>
 
           {/* Legenda */}
@@ -352,23 +405,23 @@ export default function HomePage() {
             </span>
           </div>
 
-          {/* Campo SVG */}
+          {/* Campo */}
           <div className="rounded-lg overflow-hidden border border-green-900 mb-4">
             <FieldSVG />
           </div>
 
           <button
             onClick={submitVotes}
-            disabled={submitting}
-            className="w-full bg-green-600 text-white py-2 rounded font-bold mb-2"
+            disabled={submitting || !!teamError}
+            className="w-full bg-green-600 text-white py-2 rounded font-bold mb-2 disabled:opacity-50"
           >
             Salva Voti e MVP
           </button>
           {isAdmin && (
             <button
               onClick={closeVoting}
-              disabled={closing}
-              className="w-full bg-red-600 text-white py-2 rounded font-bold"
+              disabled={closing || !!teamError}
+              className="w-full bg-red-600 text-white py-2 rounded font-bold disabled:opacity-50"
             >
               Chiudi Voti
             </button>
@@ -387,9 +440,7 @@ export default function HomePage() {
             onClick={e => e.stopPropagation()}
           >
             <div className={`inline-block px-2 py-0.5 rounded text-xs mb-2 font-medium ${
-              modal.player.team === 'A'
-                ? 'bg-blue-100 text-blue-800'
-                : 'bg-red-100 text-red-800'
+              modal.player.team === 'A' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
             }`}>
               Squadra {modal.player.team}
             </div>
