@@ -18,11 +18,9 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
 
-  // Nickname binding
   const [existingProfiles, setExistingProfiles] = useState<{ id_uuid: string; nick_name: string }[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>('');
 
-  // Carica i profili senza email quando si passa in modalità registrazione
   useEffect(() => {
     if (!isRegistering) return;
 
@@ -40,7 +38,7 @@ export default function LoginPage() {
     }
 
     loadProfiles();
-  }, [isRegistering]);
+  }, [isRegistering, supabase]);
 
   const switchMode = () => {
     setIsRegistering(!isRegistering);
@@ -55,7 +53,6 @@ export default function LoginPage() {
     setSuccess('');
 
     if (isRegistering) {
-      // 1. Crea l'utente in Supabase Auth
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
 
       if (signUpError || !signUpData.user) {
@@ -67,7 +64,6 @@ export default function LoginPage() {
       const newUserId = signUpData.user.id;
 
       if (selectedProfileId) {
-        // 2a. Binda il profilo esistente al nuovo utente
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ id_uuid: newUserId, email })
@@ -84,7 +80,6 @@ export default function LoginPage() {
       setIsRegistering(false);
       setSelectedProfileId('');
       setLoading(false);
-
     } else {
       // LOGIN
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
@@ -95,25 +90,15 @@ export default function LoginPage() {
         return;
       }
 
-      // Check profilo
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('has_completed_profile')
-        .eq('id_uuid', authData.user.id)
-        .single();
-
-      if (profileError || !profile?.has_completed_profile) {
-        window.location.href = '/setup';
-      } else {
-        window.location.href = '/';
-      }
+      // Reindirizzamento corretto alla home
+      router.push('/');
+      router.refresh();
     }
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full mx-4 p-8 bg-white shadow-lg rounded-2xl border border-gray-100">
-        {/* Header */}
         <div className="text-center mb-8">
           <span className="text-4xl">⚽</span>
           <h1 className="text-2xl font-bold mt-2 text-gray-800">
@@ -147,58 +132,33 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* Selezione nickname — solo in fase di registrazione */}
           {isRegistering && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sei già nella lista?{' '}
-                <span className="text-gray-400 font-normal">(opzionale)</span>
+                Sei già nella lista? <span className="text-gray-400 font-normal">(opzionale)</span>
               </label>
-              <p className="text-xs text-gray-400 mb-2">
-                Se hai già giocato con noi, seleziona il tuo nickname per collegare il tuo storico.
-              </p>
-
-              {existingProfiles.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Nessun profilo disponibile da collegare.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {existingProfiles.map((p) => (
-                    <button
-                      key={p.id_uuid}
-                      type="button"
-                      onClick={() =>
-                        setSelectedProfileId(selectedProfileId === p.id_uuid ? '' : p.id_uuid)
-                      }
-                      className={`text-sm px-3 py-2 rounded-lg border text-left transition font-medium truncate
-                        ${selectedProfileId === p.id_uuid
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400'
-                        }`}
-                    >
-                      {p.nick_name}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {selectedProfileId && (
-                <p className="text-xs text-blue-600 mt-2">
-                  ✓ Collegherai il tuo account a{' '}
-                  <strong>{existingProfiles.find((p) => p.id_uuid === selectedProfileId)?.nick_name}</strong>
-                </p>
-              )}
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {existingProfiles.map((p) => (
+                  <button
+                    key={p.id_uuid}
+                    type="button"
+                    onClick={() => setSelectedProfileId(selectedProfileId === p.id_uuid ? '' : p.id_uuid)}
+                    className={`text-sm px-3 py-2 rounded-lg border text-left transition font-medium truncate ${
+                      selectedProfileId === p.id_uuid
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400'
+                    }`}
+                  >
+                    {p.nick_name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Messaggi */}
-          {error && (
-            <p className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>
-          )}
-          {success && (
-            <p className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100">{success}</p>
-          )}
+          {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>}
+          {success && <p className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100">{success}</p>}
 
-          {/* Bottone principale */}
           <button
             onClick={handleAuth}
             disabled={loading}
@@ -207,11 +167,8 @@ export default function LoginPage() {
             {loading ? 'Attendere...' : isRegistering ? 'Crea account' : 'Accedi'}
           </button>
 
-          {/* Switch login / registrazione */}
           <div className="text-center pt-1">
-            <span className="text-sm text-gray-500">
-              {isRegistering ? 'Hai già un account? ' : 'Non hai un account? '}
-            </span>
+            <span className="text-sm text-gray-500">{isRegistering ? 'Hai già un account? ' : 'Non hai un account? '}</span>
             <button onClick={switchMode} className="text-sm text-blue-600 hover:underline font-medium">
               {isRegistering ? 'Accedi' : 'Registrati'}
             </button>
