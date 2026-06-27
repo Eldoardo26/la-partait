@@ -318,6 +318,7 @@ export default function HomePage() {
                         <span className="font-medium text-gray-800 text-sm">{p.nick_name}</span>
                       </div>
                       <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">⚽{p.goal}</span>
                         <span className="text-sm font-bold text-gray-900">{p.media_score}</span>
                         <WinBadge percentage={p.win_percentage} />
                       </div>

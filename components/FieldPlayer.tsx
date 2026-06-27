@@ -19,13 +19,6 @@ export function FieldPlayerCircle({ player, isMe, onClick }: FieldPlayerProps) {
   const [cx, cy] = player.pos;
   const avatarUrl = getAvatarUrl(player.avatarUrl, 36);
 
-  const teamGradient =
-    player.team === 'A'
-      ? 'url(#gradA)'
-      : 'url(#gradB)';
-
-  const meGradient = 'url(#gradMe)';
-
   return (
     <motion.g
       initial={{ opacity: 0, scale: 0.5 }}
@@ -59,20 +52,19 @@ export function FieldPlayerCircle({ player, isMe, onClick }: FieldPlayerProps) {
         cx={cx}
         cy={cy}
         r={RADIUS}
-        fill={isMe ? `url(#gradMe-${player.id})` : (player.team === 'A' ? `url(#gradA-${player.id})` : `url(#gradB-${player.id})`)}
+        fill={
+          isMe
+            ? `url(#gradMe-${player.id})`
+            : player.team === 'A'
+              ? `url(#gradA-${player.id})`
+              : `url(#gradB-${player.id})`
+        }
         stroke="rgba(255,255,255,0.4)"
         strokeWidth="1.5"
       />
 
       {/* Inner glass highlight */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={RADIUS - 2}
-        fill="none"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
+      <circle cx={cx} cy={cy} r={RADIUS - 2} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
 
       {/* Avatar or initials */}
       {avatarUrl ? (
@@ -113,51 +105,28 @@ export function FieldPlayerCircle({ player, isMe, onClick }: FieldPlayerProps) {
 
       {/* MVP star */}
       {player.mvp && (
-        <text
-          x={cx + RADIUS - 2}
-          y={cy - RADIUS + 4}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={12}
-        >
+        <text x={cx + RADIUS - 2} y={cy - RADIUS + 4} textAnchor="middle" dominantBaseline="middle" fontSize={12}>
           ⭐
         </text>
       )}
 
       {/* Name label */}
-      <text
-        x={cx}
-        y={cy + RADIUS + 12}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="#fff"
-        fontSize={9}
-        fontWeight="500"
-        className="drop-shadow-sm"
-      >
+      <text x={cx} y={cy + RADIUS + 12} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={9} fontWeight="500" className="drop-shadow-sm">
         {player.name.split(' ')[0]}
       </text>
 
-      {/* Score badge */}
+      {/* Match goals badge (below name) */}
+      {player.goals > 0 && (
+        <text x={cx} y={cy + RADIUS + 22} textAnchor="middle" dominantBaseline="middle" fill="#FFD700" fontSize={8} fontWeight="bold" className="drop-shadow">
+          ⚽{player.goals}
+        </text>
+      )}
+
+      {/* Score badge (top) */}
       {player.score !== null && (
         <>
-          <rect
-            x={cx - 10}
-            y={cy - RADIUS - 14}
-            width={20}
-            height={14}
-            rx={7}
-            fill="rgba(255,255,255,0.95)"
-          />
-          <text
-            x={cx}
-            y={cy - RADIUS - 5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#111"
-            fontSize={10}
-            fontWeight="bold"
-          >
+          <rect x={cx - 12} y={cy - RADIUS - 14} width={24} height={14} rx={7} fill="rgba(255,255,255,0.95)" />
+          <text x={cx} y={cy - RADIUS - 5} textAnchor="middle" dominantBaseline="middle" fill="#111" fontSize={10} fontWeight="bold">
             {player.score}
           </text>
         </>

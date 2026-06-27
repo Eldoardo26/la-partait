@@ -10,6 +10,9 @@ export interface FieldPlayer {
   team: 'A' | 'B';
   pos: [number, number];
   score: number | null;
+  matchVote: number | null;
+  goals: number;
+  totalGoals: number;
   mvp: boolean;
   winPercentage: number | null;
 }
@@ -31,30 +34,9 @@ export interface MatchData {
 function getPositions(count: number, isTeamA: boolean): [number, number][] {
   const yFlip = (y: number) => (isTeamA ? 520 - y : y);
   const layouts: Record<number, [number, number][]> = {
-    5: [
-      [170, 35],
-      [90, 115],
-      [250, 115],
-      [110, 200],
-      [230, 200],
-    ],
-    6: [
-      [170, 35],
-      [90, 105],
-      [250, 105],
-      [100, 180],
-      [240, 180],
-      [170, 235],
-    ],
-    7: [
-      [170, 35],
-      [80, 100],
-      [260, 100],
-      [100, 165],
-      [240, 165],
-      [140, 230],
-      [200, 230],
-    ],
+    5: [[170, 35],[90, 115],[250, 115],[110, 200],[230, 200]],
+    6: [[170, 35],[90, 105],[250, 105],[100, 180],[240, 180],[170, 235]],
+    7: [[170, 35],[80, 100],[260, 100],[100, 165],[240, 165],[140, 230],[200, 230]],
   };
   const base = layouts[count] ?? layouts[5];
   return base.map(([x, y]) => [x, yFlip(y)]);
@@ -64,12 +46,7 @@ export function useMatch(userId: string | undefined) {
   return useQuery({
     queryKey: ['match', 'open', userId],
     queryFn: async (): Promise<MatchData> => {
-      const result: MatchData = {
-        match: null,
-        players: [],
-        userVotes: {},
-        mvpId: null,
-      };
+      const result: MatchData = { match: null, players: [], userVotes: {}, mvpId: null };
 
       const { data: openMatch } = await supabase
         .from('matches')
@@ -82,38 +59,44 @@ export function useMatch(userId: string | undefined) {
 
       const { data: mp } = await supabase
         .from('match_players')
-        .select('*, profiles!inner(nick_name, avatar_url, win_percentage)')
+        .select('*, profiles!inner(nick_name, avatar_url, win_percentage, goal)')
         .eq('match_id', openMatch.id_uuid);
 
       const rawPlayers = mp || [];
-      const half = Math.ceil(rawPlayers.length / 2);
-      const teamA = rawPlayers.slice(0, half);
-      const teamB = rawPlayers.slice(half);
 
-      const posA = getPositions(teamA.length, true);
-      const posB = getPositions(teamB.length, false);
+      // Group by team
+      const teamA = rawPlayers.filter((p: any) => p.team === 'A');
+      const teamB = rawPlayers.filter((p: any) => p.team === 'B');
+      const unassigned = rawPlayers.filter((p: any) => p.team !== 'A' && p.team !== 'B');
+
+      // If no team column yet (backward compat), fall back to index split
+      const useTeamA = teamA.length > 0 || teamB.length > 0
+        ? teamA
+        : unassigned.slice(0, Math.ceil(unassigned.length / 2));
+      const useTeamB = teamB.length > 0 || teamA.length > 0
+        ? teamB
+        : unassigned.slice(Math.ceil(unassigned.length / 2));
+
+      const posA = getPositions(useTeamA.length, true);
+      const posB = getPositions(useTeamB.length, false);
+
+      const buildPlayer = (p: any, team: 'A' | 'B', i: number, positions: [number, number][]): FieldPlayer => ({
+        id: p.player_id,
+        name: p.profiles?.nick_name || 'Giocatore',
+        avatarUrl: p.profiles?.avatar_url || null,
+        team,
+        pos: (positions[i] ?? [170, team === 'A' ? 460 : 60]) as [number, number],
+        score: null,
+        matchVote: p.voto ?? null,
+        goals: p.GOAL || 0,
+        totalGoals: p.profiles?.goal || 0,
+        mvp: p.mvp || false,
+        winPercentage: p.profiles?.win_percentage ?? null,
+      });
 
       const built: FieldPlayer[] = [
-        ...teamA.map((p: any, i: number) => ({
-          id: p.player_id,
-          name: p.profiles?.nick_name || 'Giocatore',
-          avatarUrl: p.profiles?.avatar_url || null,
-          team: 'A' as const,
-          pos: (posA[i] ?? [170, 460]) as [number, number],
-          score: null,
-          mvp: p.mvp || false,
-          winPercentage: p.profiles?.win_percentage ?? null,
-        })),
-        ...teamB.map((p: any, i: number) => ({
-          id: p.player_id,
-          name: p.profiles?.nick_name || 'Giocatore',
-          avatarUrl: p.profiles?.avatar_url || null,
-          team: 'B' as const,
-          pos: (posB[i] ?? [170, 60]) as [number, number],
-          score: null,
-          mvp: p.mvp || false,
-          winPercentage: p.profiles?.win_percentage ?? null,
-        })),
+        ...useTeamA.map((p, i) => buildPlayer(p, 'A', i, posA)),
+        ...useTeamB.map((p, i) => buildPlayer(p, 'B', i, posB)),
       ];
 
       if (userId) {
@@ -125,17 +108,16 @@ export function useMatch(userId: string | undefined) {
 
         if (myVotes) {
           const vObj: Record<string, number> = {};
-          let mvp: string | null = null;
-          myVotes.forEach((v: any) => {
-            vObj[v.target_id] = v.score;
-          });
+          myVotes.forEach((v: any) => { vObj[v.target_id] = v.score; });
           built.forEach((p) => {
             if (vObj[p.id] !== undefined) p.score = vObj[p.id];
-            if (p.mvp) mvp = p.id;
           });
           result.userVotes = vObj;
-          result.mvpId = mvp;
         }
+
+        // MVP from match_players where mvp = true
+        const mvpPlayer = built.find((p) => p.mvp);
+        result.mvpId = mvpPlayer?.id ?? null;
       }
 
       result.players = built;
@@ -164,10 +146,11 @@ export function useSubmitVotes() {
         voter_id: voterId,
         target_id: playerId,
         match_id: matchId,
-        score,
+        score: Math.round(score),
       }));
 
       await supabase.from('votes').upsert(voteRows);
+
       await supabase.from('match_players').update({ mvp: false }).eq('match_id', matchId);
       if (mvpId) {
         await supabase
@@ -177,7 +160,7 @@ export function useSubmitVotes() {
           .eq('player_id', mvpId);
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['match', 'open'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     },

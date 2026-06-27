@@ -7,7 +7,7 @@ export interface LeaderboardPlayer {
   nick_name: string;
   media_score: number;
   win_percentage: number | null;
-  matches_played?: number;
+  goal: number;
 }
 
 export interface MatchHistory {
@@ -25,7 +25,7 @@ export function useLeaderboard() {
       const [playersRes, matchesRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('nick_name, media_score, win_percentage')
+          .select('nick_name, media_score, win_percentage, goal')
           .not('media_score', 'is', null)
           .order('media_score', { ascending: false })
           .limit(10),
@@ -37,11 +37,11 @@ export function useLeaderboard() {
           .limit(5),
       ]);
 
-      // Count matches per player
       const players: LeaderboardPlayer[] = (playersRes.data || []).map((p: any) => ({
         nick_name: p.nick_name,
         media_score: p.media_score,
         win_percentage: p.win_percentage ?? null,
+        goal: p.goal || 0,
       }));
 
       const history: MatchHistory[] = (matchesRes.data || []).map((m: any) => ({

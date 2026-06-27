@@ -74,6 +74,9 @@ export default function ClassificaPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
+                      <span className="text-[10px] text-gray-400">⚽{p.goal}</span>
+                    </div>
+                    <div className="text-right">
                       <span className="text-sm font-bold text-gray-900">{p.media_score}</span>
                       <p className="text-[10px] text-gray-400">media</p>
                     </div>

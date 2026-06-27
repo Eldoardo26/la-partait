@@ -77,6 +77,13 @@ export function VoteModal({ player, currentScore, currentMvpId, onSave, onClose 
           </div>
         </div>
 
+        {/* Player stats */}
+        <div className="flex gap-4 mb-4 text-xs text-gray-500">
+          <span>⚽ {player.goals} gol partita</span>
+          <span>🏆 {player.totalGoals} gol totali</span>
+          {player.matchVote !== null && <span>⭐ {player.matchVote} voto</span>}
+        </div>
+
         {/* Score input */}
         <label className="block text-sm font-medium text-gray-700 mb-2">Voto (1-10)</label>
         <input
