@@ -32,12 +32,14 @@ export default function CreateMatchPage() {
   }, []);
 
   const filteredPlayers = useMemo(() => {
-    return allPlayers.filter(
-      (p) =>
-        p.nick_name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !selectedPlayers.find((sp) => sp.id_uuid === p.id_uuid)
-    );
-  }, [allPlayers, searchTerm, selectedPlayers]);
+  return allPlayers.filter(
+    (p) =>
+      // Aggiungiamo un controllo di sicurezza per p.nick_name
+      p.nick_name && 
+      p.nick_name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !selectedPlayers.find((sp) => sp.id_uuid === p.id_uuid)
+  );
+}, [allPlayers, searchTerm, selectedPlayers]);
 
   const addPlayer = (player: any) => {
     if (selectedPlayers.length < numPlayers * 2) {
