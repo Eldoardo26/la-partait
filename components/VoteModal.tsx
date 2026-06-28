@@ -9,11 +9,12 @@ interface VoteModalProps {
   player: FieldPlayer;
   currentScore: number | null;
   currentMvpId: string | null;
+  canAssignMvp: boolean;
   onSave: (score: number, isMvp: boolean) => void;
   onClose: () => void;
 }
 
-export function VoteModal({ player, currentScore, currentMvpId, onSave, onClose }: VoteModalProps) {
+export function VoteModal({ player, currentScore, currentMvpId, canAssignMvp, onSave, onClose }: VoteModalProps) {
   const [inputVal, setInputVal] = useState(currentScore !== null ? String(currentScore) : '');
   const [isMvp, setIsMvp] = useState(player.id === currentMvpId);
 
@@ -118,15 +119,25 @@ export function VoteModal({ player, currentScore, currentMvpId, onSave, onClose 
         {/* MVP toggle */}
         <button
           onClick={() => setIsMvp(!isMvp)}
+          disabled={!canAssignMvp && !isMvp}
           className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm transition ${
-            isMvp
-              ? 'bg-amber-100 text-amber-700 border border-amber-300'
+            !canAssignMvp && !isMvp
+              ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+              : isMvp
+              ? 'bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200'
               : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
           }`}
         >
           <Star size={16} fill={isMvp ? '#D97706' : 'none'} className={isMvp ? 'text-amber-600' : 'text-gray-400'} />
           {isMvp ? 'MVP selezionato' : 'Assegna MVP'}
         </button>
+
+        {/* MVP warning message */}
+        {!canAssignMvp && currentMvpId && currentMvpId !== player.id && (
+          <p className="text-xs text-amber-600 mt-2 text-center font-medium">
+            ⭐ MVP già assegnato. Toglilo prima di assegnarlo a un altro giocatore.
+          </p>
+        )}
 
         {/* Save button */}
         <button

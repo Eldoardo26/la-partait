@@ -318,6 +318,14 @@ export default function HomePage() {
 
   function handleVoteSave(score: number, isMvp: boolean) {
     if (!state.modalPlayer) return;
+
+    // Impedisci di assegnare MVP se ce n'è già uno
+    if (isMvp && state.mvpId && state.mvpId !== state.modalPlayer.id) {
+      return alert(
+        `⭐ MVP già assegnato!\n\nHai già scelto un MVP. Togliilo prima di assegnarlo a un altro giocatore.`
+      );
+    }
+
     dispatch({ type: 'VOTE_UPDATE', playerId: state.modalPlayer.id, score, isMvp });
   }
 
@@ -550,6 +558,7 @@ export default function HomePage() {
                 player={state.modalPlayer}
                 currentScore={state.votes[state.modalPlayer.id] ?? null}
                 currentMvpId={state.mvpId}
+                canAssignMvp={!state.mvpId || state.mvpId === state.modalPlayer.id}
                 onSave={handleVoteSave}
                 onClose={() => dispatch({ type: 'MODAL_CLOSE' })}
               />
