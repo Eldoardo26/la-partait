@@ -330,12 +330,15 @@ export default function HomePage() {
   }
 
   async function handleSubmitVotes() {
-    if (!user || !matchData?.match) return;
+    // Use optional chaining and a guard clause to ensure the object exists
+    if (!user || !matchData?.match) return; 
+
+    // Now TypeScript knows matchData.match is defined
     await submitVotes.mutateAsync({
       matchId: matchData.match.id_uuid,
       voterId: user.id,
-      votes:   state.votes,
-      mvpId:   state.mvpId,
+      votes: state.votes,
+      mvpId: state.mvpId,
     });
     dispatch({ type: 'SHOW_SUCCESS' });
   }
