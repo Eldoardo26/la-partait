@@ -120,7 +120,6 @@ export function useMatch(userId: string | undefined) {
     enabled: !!userId,
   });
 }
-
 export function useSubmitVotes() {
   const queryClient = useQueryClient();
 
@@ -136,21 +135,37 @@ export function useSubmitVotes() {
       votes: Record<string, number>;
       mvpId: string | null;
     }) => {
+      // 1. Mappiamo le righe includendo la colonna "ha vinto?"
+      // Nota: Assicurati che il nome della colonna nel DB sia esattamente "ha vinto?"
+      // Se nel DB si chiama diversamente (es: "ha_vinto"), usa quel nome qui.
       const voteRows = Object.entries(votes).map(([playerId, score]) => ({
         voter_id: voterId,
         target_id: playerId,
         match_id: matchId,
-        score,
+        score: score,
+        "ha vinto?": false, 
       }));
 
-      await supabase.from('votes').upsert(voteRows);
-      await supabase.from('match_players').update({ mvp: false }).eq('match_id', matchId);
+      // 2. Eseguiamo l'upsert e verifichiamo eventuali errori
+      const { error: voteError } = await supabase.from('votes').upsert(voteRows);
+      if (voteError) throw voteError;
+
+      // 3. Gestione MVP su match_players
+      const { error: resetMvpError } = await supabase
+        .from('match_players')
+        .update({ mvp: false })
+        .eq('match_id', matchId);
+      
+      if (resetMvpError) throw resetMvpError;
+
       if (mvpId) {
-        await supabase
+        const { error: setMvpError } = await supabase
           .from('match_players')
           .update({ mvp: true })
           .eq('match_id', matchId)
           .eq('player_id', mvpId);
+          
+        if (setMvpError) throw setMvpError;
       }
     },
     onSuccess: () => {

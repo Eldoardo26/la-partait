@@ -329,40 +329,37 @@ export default function HomePage() {
     dispatch({ type: 'VOTE_UPDATE', playerId: state.modalPlayer.id, score, isMvp });
   }
 
-  async function handleSubmitVotes() {
-    // Use optional chaining and a guard clause to ensure the object exists
-    if (!user || !matchData?.match) return; 
+  // Sostituisci le tue funzioni attuali con queste:
 
-    // Now TypeScript knows matchData.match is defined
-    await submitVotes.mutateAsync({
-      matchId: matchData.match.id_uuid,
-      voterId: user.id,
-      votes: state.votes,
-      mvpId: state.mvpId,
-    });
-    dispatch({ type: 'SHOW_SUCCESS' });
+async function handleSubmitVotes() {
+  // Questo controllo risolve l'errore ts(18047)
+  if (!user || !matchData?.match) return; 
+
+  await submitVotes.mutateAsync({
+    matchId: matchData.match.id_uuid,
+    voterId: user.id,
+    votes: state.votes,
+    mvpId: state.mvpId,
+  });
+  dispatch({ type: 'SHOW_SUCCESS' });
+}
+
+async function closeMatch() {
+  if (!matchData?.match) return; // Controllo di sicurezza
+
+  setIsClosing(true);
+  try {
+    const { error } = await supabase
+      .from('matches')
+      .update({ status: 'CHIUSO' })
+      .eq('id_uuid', matchData.match.id_uuid);
+
+    if (error) throw error;
+    refetchMatch();
+  } finally {
+    setIsClosing(false);
   }
-
-  async function closeMatch() {
-    if (!matchData?.match) return;
-    setIsClosing(true);
-    try {
-      const { error } = await supabase
-        .from('matches')
-        .update({ status: 'CHIUSO' })
-        .eq('id_uuid', matchData.match.id_uuid);
-
-      if (error) throw error;
-      alert('Partita chiusa!');
-      refetchMatch();
-    } catch (err) {
-      console.error(err);
-      alert('Errore nel chiudere la partita');
-    } finally {
-      setIsClosing(false);
-    }
-  }
-
+}
   async function deleteMatch() {
     if (!matchData?.match) return;
     if (!confirm('Sei sicuro di voler eliminare la partita? Questa azione non può essere annullata.')) return;
@@ -553,8 +550,7 @@ export default function HomePage() {
             </motion.section>
           )}
 
-          {/* Vote modal */}
-          // All'interno di page.tsx
+          
 
           <AnimatePresence>
             {state.modalPlayer && (
