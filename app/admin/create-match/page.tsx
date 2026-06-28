@@ -40,14 +40,16 @@ export default function CreateMatchPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const [players, setPlayers]     = useState<any[]>([]);
-  const [teamA, setTeamA]         = useState<string[]>([]);
-  const [teamB, setTeamB]         = useState<string[]>([]);
-  const [date, setDate]           = useState('');
-  const [sport, setSport]         = useState<Sport>('calcio');
-  const [volleyFmt, setVolleyFmt] = useState<VolleyFormat>('6v6');
-  const [soccerFmt, setSoccerFmt] = useState<SoccerFormat>('5v5');
-  const [courtType, setCourtType] = useState<CourtType>('indoor');
+  const [players, setPlayers]       = useState<any[]>([]);
+  const [teamA, setTeamA]           = useState<string[]>([]);
+  const [teamB, setTeamB]           = useState<string[]>([]);
+  const [date, setDate]             = useState('');
+  const [sport, setSport]           = useState<Sport>('calcio');
+  const [volleyFmt, setVolleyFmt]   = useState<VolleyFormat>('6v6');
+  const [soccerFmt, setSoccerFmt]   = useState<SoccerFormat>('5v5');
+  const [courtType, setCourtType]   = useState<CourtType>('indoor');
+  const [openMatch, setOpenMatch]   = useState<any>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     async function loadPlayers() {
@@ -55,6 +57,18 @@ export default function CreateMatchPage() {
       if (data) setPlayers(data);
     }
     loadPlayers();
+  }, [supabase]);
+
+  useEffect(() => {
+    async function checkOpenMatch() {
+      const { data } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('status', 'APERTO')
+        .maybeSingle();
+      if (data) setOpenMatch(data);
+    }
+    checkOpenMatch();
   }, [supabase]);
 
   const format    = sport === 'volley' ? volleyFmt : soccerFmt;
@@ -83,39 +97,101 @@ export default function CreateMatchPage() {
     }
   };
 
+  async function closeOpenMatch() {
+    if (!openMatch) return;
+    const { error } = await supabase
+      .from('matches')
+      .update({ status: 'CHIUSO' })
+      .eq('id_uuid', openMatch.id_uuid);
+
+    if (error) {
+      console.error(error);
+      return alert('Errore nel chiudere la partita');
+    }
+
+    setOpenMatch(null);
+    alert('Partita chiusa!');
+  }
+
+  async function deleteOpenMatch() {
+    if (!openMatch) return;
+    if (!confirm('Sei sicuro di voler eliminare la partita aperta? Questa azione non può essere annullata.')) return;
+
+    const { error: deleteVotes } = await supabase
+      .from('votes')
+      .delete()
+      .eq('match_id', openMatch.id_uuid);
+
+    const { error: deleteMatchPlayers } = await supabase
+      .from('match_players')
+      .delete()
+      .eq('match_id', openMatch.id_uuid);
+
+    const { error: deleteMatch } = await supabase
+      .from('matches')
+      .delete()
+      .eq('id_uuid', openMatch.id_uuid);
+
+    if (deleteVotes || deleteMatchPlayers || deleteMatch) {
+      console.error({ deleteVotes, deleteMatchPlayers, deleteMatch });
+      return alert('Errore nel eliminare la partita');
+    }
+
+    setOpenMatch(null);
+    alert('Partita eliminata!');
+  }
+
   async function createMatch() {
     if (!date) return alert('Inserisci la data!');
     if (teamA.length !== maxPerTeam || teamB.length !== maxPerTeam)
       return alert(`Ogni squadra deve avere esattamente ${maxPerTeam} giocatori!`);
 
-    const matchType = sport === 'volley'
-      ? `Pallavolo ${volleyFmt}`                  // es. "Pallavolo 6v6"
-      : SOCCER_FORMATS.find(f => f.value === soccerFmt)?.label ?? `Calcio ${soccerFmt}`; // es. "Calcio a 5"
+    setIsCreating(true);
 
-    const { data: match, error: matchErr } = await supabase
-      .from('matches')
-      .insert([{
-        match_date: date,
-        match_type: matchType,
-        status:     'APERTO',
-        TIPO:       sport === 'volley' ? courtType : 'grass',
-        format:     format,
-      }])
-      .select('id')
-      .single();
+    try {
+      const matchType = sport === 'volley'
+        ? `Pallavolo ${volleyFmt}`
+        : SOCCER_FORMATS.find(f => f.value === soccerFmt)?.label ?? `Calcio ${soccerFmt}`;
 
-    if (matchErr) return console.error(matchErr);
+      const { data: match, error: matchErr } = await supabase
+        .from('matches')
+        .insert([{
+          match_date: date,
+          match_type: matchType,
+          status:     'APERTO',
+          TIPO:       sport === 'volley' ? courtType : 'grass',
+        }])
+        .select('id_uuid')
+        .single();
 
-    const playerRows = [
-      ...teamA.map(pId => ({ match_id: match.id, player_id: pId, team: 'A', mvp: false, GOAL: 0 })),
-      ...teamB.map(pId => ({ match_id: match.id, player_id: pId, team: 'B', mvp: false, GOAL: 0 })),
-    ];
+      if (matchErr) {
+        console.error(matchErr);
+        alert('Errore nella creazione della partita');
+        setIsCreating(false);
+        return;
+      }
 
-    const { error: playersErr } = await supabase.from('match_players').insert(playerRows);
-    if (playersErr) return console.error(playersErr);
+      const playerRows = [
+        ...teamA.map(pId => ({ match_id: match.id_uuid, player_id: pId, team: 'A', mvp: false, GOAL: 0 })),
+        ...teamB.map(pId => ({ match_id: match.id_uuid, player_id: pId, team: 'B', mvp: false, GOAL: 0 })),
+      ];
 
-    alert('Partita creata!');
-    router.push('/');
+      const { error: playersErr } = await supabase.from('match_players').insert(playerRows);
+      if (playersErr) {
+        console.error(playersErr);
+        alert('Errore nell\'aggiunta dei giocatori');
+        setIsCreating(false);
+        return;
+      }
+
+      alert('Partita creata!');
+      router.push('/');
+    } catch (err) {
+      console.error(err);
+      alert('Errore inatteso');
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   const isVolley = sport === 'volley';
@@ -125,6 +201,29 @@ export default function CreateMatchPage() {
       <h1 className="text-2xl font-bold mb-6">
         {isVolley ? '🏐' : '⚽'} Crea Nuova Partita
       </h1>
+
+      {/* Alert partita aperta */}
+      {openMatch && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-300 rounded-lg">
+          <p className="font-semibold text-red-800 mb-3">
+            ⚠️ Esiste già una partita aperta ({openMatch.match_type})
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={closeOpenMatch}
+              className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition"
+            >
+              ✓ Chiudi Partita
+            </button>
+            <button
+              onClick={deleteOpenMatch}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition"
+            >
+              🗑️ Elimina Partita
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-5 bg-white p-6 rounded-xl shadow-sm border">
 
@@ -160,6 +259,7 @@ export default function CreateMatchPage() {
           <label className="block text-sm font-semibold mb-1 text-gray-700">Data</label>
           <input
             type="date"
+            value={date}
             onChange={(e) => setDate(e.target.value)}
             className="w-full border p-2 rounded-lg"
           />
@@ -280,13 +380,21 @@ export default function CreateMatchPage() {
 
         <button
           onClick={createMatch}
-          className={`w-full py-3 rounded-xl font-bold text-white transition ${
+          disabled={isCreating}
+          className={`w-full py-3 rounded-xl font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed ${
             isVolley
               ? 'bg-amber-500 hover:bg-amber-600'
               : 'bg-green-600 hover:bg-green-700'
           }`}
         >
-          {isVolley ? '🏐' : '⚽'} Crea Partita e Apri Voti
+          {isCreating ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Creando...
+            </span>
+          ) : (
+            `${isVolley ? '🏐' : '⚽'} Crea Partita e Apri Voti`
+          )}
         </button>
       </div>
     </div>

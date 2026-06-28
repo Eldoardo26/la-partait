@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useReducer } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, TrendingUp } from 'lucide-react';
+import { Trophy, Calendar, TrendingUp, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase-browser';
 import { useMatch, useSubmitVotes, type FieldPlayer } from '@/hooks/use-match';
 import { useLeaderboard } from '@/hooks/use-leaderboard';
@@ -284,6 +284,8 @@ export default function HomePage() {
   const [state, dispatch]             = useReducer(voteReducer, {
     votes: {}, mvpId: null, modalPlayer: null, showSuccess: false,
   });
+  const [isClosing, setIsClosing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -295,7 +297,7 @@ export default function HomePage() {
       .then(({ data }) => setUserProfile(data));
   }, [user]);
 
-  const { data: matchData, isLoading: matchLoading } = useMatch(user?.id);
+  const { data: matchData, isLoading: matchLoading, refetch: refetchMatch } = useMatch(user?.id);
   const { data: leaderboardData, isLoading: leaderboardLoading } = useLeaderboard();
   const submitVotes = useSubmitVotes();
 
@@ -330,6 +332,59 @@ export default function HomePage() {
     dispatch({ type: 'SHOW_SUCCESS' });
   }
 
+  async function closeMatch() {
+    if (!matchData?.match) return;
+    setIsClosing(true);
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .update({ status: 'CHIUSO' })
+        .eq('id_uuid', matchData.match.id_uuid);
+
+      if (error) throw error;
+      alert('Partita chiusa!');
+      refetchMatch();
+    } catch (err) {
+      console.error(err);
+      alert('Errore nel chiudere la partita');
+    } finally {
+      setIsClosing(false);
+    }
+  }
+
+  async function deleteMatch() {
+    if (!matchData?.match) return;
+    if (!confirm('Sei sicuro di voler eliminare la partita? Questa azione non può essere annullata.')) return;
+
+    setIsDeleting(true);
+    try {
+      const { error: deleteVotes } = await supabase
+        .from('votes')
+        .delete()
+        .eq('match_id', matchData.match.id_uuid);
+
+      const { error: deleteMatchPlayers } = await supabase
+        .from('match_players')
+        .delete()
+        .eq('match_id', matchData.match.id_uuid);
+
+      const { error: deleteMatchData } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id_uuid', matchData.match.id_uuid);
+
+      if (deleteVotes || deleteMatchPlayers || deleteMatchData) throw new Error('Delete failed');
+
+      alert('Partita eliminata!');
+      refetchMatch();
+    } catch (err) {
+      console.error(err);
+      alert('Errore nell\'eliminare la partita');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   const hasVotes = Object.keys(state.votes).length > 0;
 
   const teamAPlayers  = matchData?.players.filter(p => p.team === 'A') ?? [];
@@ -339,6 +394,8 @@ export default function HomePage() {
   const matchType  = matchData?.match?.match_type ?? '';
   const courtType  = matchData?.match?.TIPO ?? 'indoor';
   const sport      = detectSport(matchType);
+  const isOpen     = matchData?.match?.status === 'APERTO';
+  const isAdmin    = userProfile?.is_admin ?? false;
 
   // Badge colour & label per sport
   const sportBadge = sport === 'volley'
@@ -397,6 +454,42 @@ export default function HomePage() {
             </motion.div>
           ) : (
             <motion.section {...fadeSlide} className="glass-card rounded-2xl p-4">
+              {/* Admin controls - Close/Delete match */}
+              {isAdmin && isOpen && (
+                <div className="mb-3 flex gap-2">
+                  <button
+                    onClick={closeMatch}
+                    disabled={isClosing}
+                    className="flex-1 px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2"
+                  >
+                    {isClosing ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Chiudendo...
+                      </>
+                    ) : (
+                      '✓ Chiudi Partita'
+                    )}
+                  </button>
+                  <button
+                    onClick={deleteMatch}
+                    disabled={isDeleting}
+                    className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Eliminando...
+                      </>
+                    ) : (
+                      <>
+                        <X size={16} /> Elimina
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
               {/* Team bar */}
               <div className="flex justify-between text-xs font-semibold mb-2 px-1">
                 <span className={sportBadge.text}>
