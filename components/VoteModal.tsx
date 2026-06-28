@@ -10,11 +10,13 @@ interface VoteModalProps {
   currentScore: number | null;
   currentMvpId: string | null;
   canAssignMvp: boolean;
+  isMatchOpen: boolean;
+  isLoading: boolean;
   onSave: (score: number, isMvp: boolean) => void;
   onClose: () => void;
 }
 
-export function VoteModal({ player, currentScore, currentMvpId, canAssignMvp, onSave, onClose }: VoteModalProps) {
+export function VoteModal({ player, currentScore, currentMvpId, canAssignMvp, isMatchOpen, isLoading, onSave, onClose }: VoteModalProps) {
   const [inputVal, setInputVal] = useState(currentScore !== null ? String(currentScore) : '');
   const [isMvp, setIsMvp] = useState(player.id === currentMvpId);
 
@@ -31,6 +33,17 @@ export function VoteModal({ player, currentScore, currentMvpId, canAssignMvp, on
   }
 
   const quickScores = [5, 5.5, 6, 6.5, 7, 7.5, 8];
+
+  // Verifica se il voto è cambiato o se l'MVP è stato cambiato
+  const isVoteChanged = () => {
+    if (!inputVal) return false;
+    const raw = parseFloat(inputVal.replace(',', '.'));
+    if (isNaN(raw)) return false;
+    const rounded = Math.round(raw * 2) / 2;
+    const mvpChanged = isMvp !== (player.id === currentMvpId);
+    const scoreChanged = currentScore === null || rounded !== currentScore;
+    return scoreChanged || mvpChanged;
+  };
 
   return (
     <motion.div
@@ -142,9 +155,19 @@ export function VoteModal({ player, currentScore, currentMvpId, canAssignMvp, on
         {/* Save button */}
         <button
           onClick={handleSave}
-          className="mt-4 w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 active:scale-[0.98] transition"
+          disabled={!isVoteChanged() || !isMatchOpen || isLoading}
+          className="mt-4 w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Salva Voto
+          {isLoading ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Salvando...
+            </>
+          ) : !isMatchOpen ? (
+            '🔒 Partita chiusa'
+          ) : (
+            'Salva Voto'
+          )}
         </button>
       </motion.div>
     </motion.div>

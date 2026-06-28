@@ -551,6 +551,8 @@ export default function HomePage() {
           )}
 
           {/* Vote modal */}
+          // All'interno di page.tsx
+
           <AnimatePresence>
             {state.modalPlayer && (
               <VoteModal
@@ -559,6 +561,10 @@ export default function HomePage() {
                 currentScore={state.votes[state.modalPlayer.id] ?? null}
                 currentMvpId={state.mvpId}
                 canAssignMvp={!state.mvpId || state.mvpId === state.modalPlayer.id}
+                // Aggiungi queste due proprietà che mancano:
+                isMatchOpen={isOpen}
+                isLoading={submitVotes.isPending}
+                // Mantieni gli handler esistenti:
                 onSave={handleVoteSave}
                 onClose={() => dispatch({ type: 'MODAL_CLOSE' })}
               />
