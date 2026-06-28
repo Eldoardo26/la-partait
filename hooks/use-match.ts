@@ -18,7 +18,7 @@ export interface FieldPlayer {
 }
 
 export interface MatchData {
-  match: { id_uuid: string; match_date: string; match_type: string; status: string } | null;
+  match: { id_uuid: string; match_date: string; match_type: string; status: string; TIPO: string } | null;
   players: FieldPlayer[];
   userVotes: Record<string, number>;
   mvpId: string | null;
