@@ -332,15 +332,22 @@ export default function HomePage() {
   // Sostituisci le tue funzioni attuali con queste:
 
 async function handleSubmitVotes() {
-  // Questo controllo risolve l'errore ts(18047)
-  if (!user || !matchData?.match) return; 
+  if (!user || !matchData?.match) return;
+
+  // Prepariamo l'array dei voti in un formato che includa l'MVP
+  // Esempio di struttura: { playerId: { score: 7.5, isMvp: true/false } }
+  const votesPayload = Object.entries(state.votes).map(([playerId, score]) => ({
+    player_id: playerId,
+    score: score,
+    is_mvp: state.mvpId === playerId // true se questo player è l'MVP
+  }));
 
   await submitVotes.mutateAsync({
     matchId: matchData.match.id_uuid,
     voterId: user.id,
-    votes: state.votes,
-    mvpId: state.mvpId,
+    votes: votesPayload, // Passiamo l'array strutturato
   });
+  
   dispatch({ type: 'SHOW_SUCCESS' });
 }
 

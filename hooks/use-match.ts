@@ -135,22 +135,23 @@ export function useSubmitVotes() {
       votes: Record<string, number>;
       mvpId: string | null;
     }) => {
-      // 1. Mappiamo le righe includendo la colonna "ha vinto?"
-      // Nota: Assicurati che il nome della colonna nel DB sia esattamente "ha vinto?"
-      // Se nel DB si chiama diversamente (es: "ha_vinto"), usa quel nome qui.
+      // 1. Mappiamo le righe. 
+      // Qui verifichiamo se il singolo giocatore in iterazione è l'MVP.
       const voteRows = Object.entries(votes).map(([playerId, score]) => ({
         voter_id: voterId,
         target_id: playerId,
         match_id: matchId,
         score: score,
-        "ha vinto?": false, 
+        // Confrontiamo il player ID corrente con l'mvpId globale
+        "ha vinto?": playerId === mvpId, 
       }));
 
-      // 2. Eseguiamo l'upsert e verifichiamo eventuali errori
+      // 2. Eseguiamo l'upsert dei voti
       const { error: voteError } = await supabase.from('votes').upsert(voteRows);
       if (voteError) throw voteError;
 
-      // 3. Gestione MVP su match_players
+      // 3. Gestione MVP su tabella 'match_players'
+      // Resettiamo prima tutti gli MVP per questa partita
       const { error: resetMvpError } = await supabase
         .from('match_players')
         .update({ mvp: false })
@@ -158,19 +159,21 @@ export function useSubmitVotes() {
       
       if (resetMvpError) throw resetMvpError;
 
+      // Se abbiamo un MVP, lo impostiamo su true nella tabella 'match_players'
       if (mvpId) {
         const { error: setMvpError } = await supabase
           .from('match_players')
           .update({ mvp: true })
           .eq('match_id', matchId)
-          .eq('player_id', mvpId);
+          .eq('player_id', mvpId); // Assicurati che il campo nella tabella sia 'player_id'
           
         if (setMvpError) throw setMvpError;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['match', 'open'] });
+      queryClient.invalidateQueries({ queryKey: ['match'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     },
   });
+
 }
