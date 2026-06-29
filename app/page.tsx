@@ -332,20 +332,13 @@ export default function HomePage() {
   // Sostituisci le tue funzioni attuali con queste:
 
 async function handleSubmitVotes() {
-  if (!user || !matchData?.match) return;
-
-  // Prepariamo l'array dei voti in un formato che includa l'MVP
-  // Esempio di struttura: { playerId: { score: 7.5, isMvp: true/false } }
-  const votesPayload = Object.entries(state.votes).map(([playerId, score]) => ({
-    player_id: playerId,
-    score: score,
-    is_mvp: state.mvpId === playerId // true se questo player è l'MVP
-  }));
+  if (!user || !matchData?.match) return; 
 
   await submitVotes.mutateAsync({
     matchId: matchData.match.id_uuid,
     voterId: user.id,
-    votes: votesPayload, // Passiamo l'array strutturato
+    votes: state.votes,      // Rimane un oggetto { "id_giocatore": voto }
+    mvpId: state.mvpId,      // Passi l'ID dell'MVP separatamente
   });
   
   dispatch({ type: 'SHOW_SUCCESS' });
