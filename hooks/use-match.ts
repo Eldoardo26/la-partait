@@ -135,23 +135,20 @@ export function useSubmitVotes() {
       votes: Record<string, number>;
       mvpId: string | null;
     }) => {
-      // 1. Mappiamo le righe. 
-      // Qui verifichiamo se il singolo giocatore in iterazione è l'MVP.
+      // 1. Mappiamo le righe. Usiamo 'mvp' come nome della colonna
       const voteRows = Object.entries(votes).map(([playerId, score]) => ({
         voter_id: voterId,
         target_id: playerId,
         match_id: matchId,
         score: score,
-        // Confrontiamo il player ID corrente con l'mvpId globale
-        "ha vinto?": playerId === mvpId, 
+        mvp: playerId === mvpId, // <-- Salva true solo per l'MVP
       }));
 
-      // 2. Eseguiamo l'upsert dei voti
+      // 2. Eseguiamo l'upsert
       const { error: voteError } = await supabase.from('votes').upsert(voteRows);
       if (voteError) throw voteError;
 
-      // 3. Gestione MVP su tabella 'match_players'
-      // Resettiamo prima tutti gli MVP per questa partita
+      // 3. Gestione MVP su match_players
       const { error: resetMvpError } = await supabase
         .from('match_players')
         .update({ mvp: false })
@@ -159,13 +156,12 @@ export function useSubmitVotes() {
       
       if (resetMvpError) throw resetMvpError;
 
-      // Se abbiamo un MVP, lo impostiamo su true nella tabella 'match_players'
       if (mvpId) {
         const { error: setMvpError } = await supabase
           .from('match_players')
           .update({ mvp: true })
           .eq('match_id', matchId)
-          .eq('player_id', mvpId); // Assicurati che il campo nella tabella sia 'player_id'
+          .eq('player_id', mvpId);
           
         if (setMvpError) throw setMvpError;
       }
@@ -175,5 +171,4 @@ export function useSubmitVotes() {
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     },
   });
-
 }
